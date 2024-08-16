@@ -163,12 +163,12 @@ def triton_gemm_a8w8_forward(out, a, b, alpha_row, alpha_col):
         a.dtype == torch.int8 and b.dtype == torch.int8
     ), "Matrix A/B must be int8 type"
     assert a.is_contiguous(), "Matrix A must be contiguous"
-    assert b.is_contiguous(), "Matrix B must be contiguous"
+    # assert b.is_contiguous(), "Matrix B must be contiguous"
     assert (
         out.dtype == torch.float16 or out.dtype == torch.bfloat16
     ), "Output type must be float16 or bfloat16"
     assert (
-        out.dtype == alpha_row.dtype and out.dtype == alpha_col.dtype
+        out.dtype == alpha_row.dtype and out.dtype == alpha_col.dtype   
     ), "Output type must match scale type"
     assert a.shape[1] == b.shape[1], "Matrix B must be transposed"
     M, K = a.shape
