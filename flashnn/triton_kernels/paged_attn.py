@@ -2192,54 +2192,116 @@ def _paged_attn_w_mma_v2_reduce_kernel(
     tl.store(out_ptr + out_offset, out, mask=group_mask)
 
 
-from blade_llm.module.triton.paged_attention_new import paged_attention as paged_attention1
-from flash_attn import flash_attn_with_kvcache
+# from blade_llm.module.triton.paged_attention_new import paged_attention as paged_attention1
+# from flash_attn import flash_attn_with_kvcache
 
 configs = []
 HEAD_DIM = 128
-tmp = [
-    # (1, 16, 16),
-    # (1, 32, 32),
-    (1, 32, 4),
-    (64, 32, 4),
-    (1, 52, 4),
-    (64, 52, 4),
-    (1, 16, 2),
-    (64, 16, 2),
-    (1, 26, 2),
-    (64, 26, 2),
-    (1, 8, 1),
-    (64, 8, 1),
-    (1, 13, 1),
-    (64, 13, 1),
+# tmp = [
+#     # (1, 16, 16),
+#     # (1, 32, 32),
+#     (1, 32, 4),
+#     (64, 32, 4),
+#     (1, 52, 4),
+#     (64, 52, 4),
+#     (1, 16, 2),
+#     (64, 16, 2),
+#     (1, 26, 2),
+#     (64, 26, 2),
+#     (1, 8, 1),
+#     (64, 8, 1),
+#     (1, 13, 1),
+#     (64, 13, 1),
+# ]
+# for bs, q_head, kv_head in tmp:
+#     configs.append(
+#         triton.testing.Benchmark(
+#             x_names=["seq_len"],
+#             x_vals=[2**i * 1024 for i in range(0, 5)],
+#             line_arg="provider",
+#             line_vals=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8",],
+#             # line_vals=["flash_attn"],
+#             # line_vals=["triton_v1", "triton_v2", "triton", "vllm"],
+#             line_names=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8"],
+#             # line_names=["flash_attn"],
+#             # line_names=["triton_v1", "triton_v2", "Triton new", "vLLM"],
+#             styles=[("red", "-"), ("yellow", "-"), ("blue", "-"), ("green", "-"), ("black", "-")],
+#             ylabel="ms",
+#             plot_name=f"BS={bs},num_head_q={q_head},num_heads_kv={kv_head},"
+#             + f"head_size=128, block_size=16,num_blocks=10240",
+#             args={
+#                 "num_seqs": bs,
+#                 "q_head": q_head,
+#                 "kv_head": kv_head,
+#                 "head_size": 128,
+#                 "block_size": 32,
+#                 "num_blocks": 1024,
+#                 "dtype": torch.float16,
+#             },
+#         )
+#     )
+
+test_cases = [
+# (1, 16384, 32, 4),
+# (1, 16384, 16, 16),
+# (1, 4096, 16, 16),
+# (1, 8192, 16, 16),
+# (1, 16384, 16,16),
+(1, 1024, 52, 4),
+(1, 2048, 52, 4),
+(1, 4096, 52, 4),
+(1, 8192, 52, 4),
+(1, 16384, 52,4),
+(64,1024, 52, 4),
+(64,16384, 52, 4),
+(1, 1024, 8 ,1),
+(1, 2048, 8 ,1),
+(1, 4096, 8 ,1),
+(1, 8192, 8 ,1),
+(1, 16384, 8, 1),
+(64,1024, 8, 1),
+(64,16384, 8, 1),
+(64, 16384, 32, 4),
 ]
-for bs, q_head, kv_head in tmp:
-    configs.append(
-        triton.testing.Benchmark(
-            x_names=["seq_len"],
-            x_vals=[2**i * 1024 for i in range(0, 5)],
-            line_arg="provider",
-            line_vals=["triton", "triton_opt","triton_unroll2","triton_unroll4","triton_unroll8",],
-            # line_vals=["flash_attn"],
-            # line_vals=["triton_v1", "triton_v2", "triton", "vllm"],
-            line_names=["triton", "triton_opt","triton_unroll2","triton_unroll4","triton_unroll8"],
-            # line_names=["flash_attn"],
-            # line_names=["triton_v1", "triton_v2", "Triton new", "vLLM"],
-            styles=[("red", "-"), ("yellow", "-"), ("blue", "-"), ("green", "-"), ("black", "-")],
-            ylabel="ms",
-            plot_name=f"BS={bs},num_head_q={q_head},num_heads_kv={kv_head},"
-            + f"head_size=128, block_size=16,num_blocks=10240",
-            args={
-                "num_seqs": bs,
-                "q_head": q_head,
-                "kv_head": kv_head,
-                "head_size": 128,
-                "block_size": 32,
-                "num_blocks": 1024,
-                "dtype": torch.float16,
-            },
-        )
+
+input_block_size = 64
+input_block_num = 2560
+
+configs.append(
+    triton.testing.Benchmark(
+        x_names=['num_seqs', 'seq_len', 'q_head', 'kv_head'],
+        x_vals=test_cases,
+        line_arg="provider",
+        line_vals=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8",],
+        line_names=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8"],
+        # line_vals=(
+        #     ["triton_fma", "triton_mma"]
+        #     # + (["vllm_v1", "vllm_v2"] if HAS_VLLM else [])
+        #     # + (["vllm_custom"] if HAS_VLLM_CUSTOM_PAGED else [])
+        # ),
+        # line_names=(
+        #     ["Triton FMA", "Triton MMA"]
+        #     # + (["vLLM_V1", "vLLM_V2"] if HAS_VLLM else [])
+        #     # + (["vLLM_CUSTOM"] if HAS_VLLM_CUSTOM_PAGED else [])
+        # ),
+        styles=[
+            ("red", "-"),
+            ("yellow", "-"),
+            ("blue", "-"),
+            ("green", "-"),
+            ("orange", "-"),
+            ("purple", "-"),
+        ],
+        ylabel="ms",
+        plot_name=f"head_size=128, block_size={input_block_size},num_blocks=2560",
+        args={
+            "head_size": 128,
+            "block_size": input_block_size,
+            "num_blocks": input_block_num,
+            "dtype": torch.float16,
+        },
     )
+)
 
 
 @triton.testing.perf_report(configs)
@@ -2308,19 +2370,19 @@ def benchmark(
     out_fa = torch.empty_like(query_fa)
     
     
-    if provider == "flash_attn":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: flash_attn_with_kvcache(
-                query_fa,
-                key_cache_fa,
-                value_cache_fa,
-                block_table=block_tables,
-                softmax_scale=scale,
-            ),
-            warmup=20,
-            rep=100,
-            quantiles=quantiles,
-        )
+    # if provider == "flash_attn":
+    #     ms, min_ms, max_ms = triton.testing.do_bench(
+    #         lambda: flash_attn_with_kvcache(
+    #             query_fa,
+    #             key_cache_fa,
+    #             value_cache_fa,
+    #             block_table=block_tables,
+    #             softmax_scale=scale,
+    #         ),
+    #         warmup=20,
+    #         rep=100,
+    #         quantiles=quantiles,
+    #     )
     
     if provider == "triton_unroll8":
         ms, min_ms, max_ms = triton.testing.do_bench(
@@ -2382,24 +2444,24 @@ def benchmark(
             quantiles=quantiles,
         )
         
-    if provider == "triton":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: paged_attention1(
-                out,
-                query,
-                key_cache_tri,
-                value_cache_tri,
-                context_lens,
-                block_tables,
-                scale,
-                max_context_len,
-                num_splits=0,
-                alibi_slope=None,
-            ),
-            warmup=200,
-            rep=500,
-            quantiles=quantiles,
-        )
+    # if provider == "triton":
+    #     ms, min_ms, max_ms = triton.testing.do_bench(
+    #         lambda: paged_attention1(
+    #             out,
+    #             query,
+    #             key_cache_tri,
+    #             value_cache_tri,
+    #             context_lens,
+    #             block_tables,
+    #             scale,
+    #             max_context_len,
+    #             num_splits=0,
+    #             alibi_slope=None,
+    #         ),
+    #         warmup=200,
+    #         rep=500,
+    #         quantiles=quantiles,
+    #     )
         
     if provider == "triton_opt":
         ms, min_ms, max_ms = triton.testing.do_bench(
