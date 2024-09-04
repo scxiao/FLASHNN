@@ -2098,7 +2098,7 @@ def _paged_attn_w_mma_kernel_unroll8(
         # for kpack in [1, 2]
         # for waves in [0]
         for stages in [0, 1]
-        for warps in [2, 4, 8, 16]
+        for warps in [1, 2, 4, 8, 16]
     ],
     key=["QUERY_GROUP_SIZE", "HEAD_SIZE", "NUM_PARTITIONS", "PARTITION_SIZE"],
 )
@@ -2242,11 +2242,6 @@ HEAD_DIM = 128
 #     )
 
 test_cases = [
-# (1, 16384, 32, 4),
-# (1, 16384, 16, 16),
-# (1, 4096, 16, 16),
-# (1, 8192, 16, 16),
-# (1, 16384, 16,16),
 (1, 1024, 52, 4),
 (1, 2048, 52, 4),
 (1, 4096, 52, 4),
@@ -2265,15 +2260,18 @@ test_cases = [
 ]
 
 input_block_size = 64
-input_block_num = 2560
+total_size = 16 * 10240
+input_block_num = total_size // input_block_size
 
 configs.append(
     triton.testing.Benchmark(
         x_names=['num_seqs', 'seq_len', 'q_head', 'kv_head'],
         x_vals=test_cases,
         line_arg="provider",
-        line_vals=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8",],
-        line_names=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8"],
+        # line_vals=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8",],
+        # line_names=["triton_opt","triton_unroll2","triton_unroll4","triton_unroll8"],
+        line_vals=["triton_opt","triton_unroll2","triton_unroll4"],
+        line_names=["triton_opt","triton_unroll2","triton_unroll4"],
         # line_vals=(
         #     ["triton_fma", "triton_mma"]
         #     # + (["vllm_v1", "vllm_v2"] if HAS_VLLM else [])
@@ -2293,7 +2291,7 @@ configs.append(
             ("purple", "-"),
         ],
         ylabel="ms",
-        plot_name=f"head_size=128, block_size={input_block_size},num_blocks=2560",
+        plot_name=f"head_size=128, block_size={input_block_size},num_blocks={input_block_num}",
         args={
             "head_size": 128,
             "block_size": input_block_size,
