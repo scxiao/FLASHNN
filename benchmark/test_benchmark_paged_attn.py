@@ -16,6 +16,7 @@ import pytest
 from flashnn.triton_kernels.paged_attn import (
     paged_attn_w_mma,
     paged_attn_w_mma_transv,
+    paged_attn_w_mma_transkv,
     paged_attn_wo_mma, 
     paged_attn_w_mma_unrolling2,
     paged_attn_w_mma_unrolling4,
@@ -141,14 +142,16 @@ configs.append(
         x_vals=get_input_shapes(),
         line_arg="provider",
         line_vals=(
-            # ["triton_mma", "triton_mma_transv"]
-            ["triton_fma", "triton_mma", "triton_mma_transv", "triton_mma_unrolling2", "triton_mma_unrolling4"]
+            ["triton_mma_transkv"]
+            # ["triton_mma", "triton_mma_transv", "triton_mma_transkv"]
+            # ["triton_fma", "triton_mma", "triton_mma_transv", "triton_mma_transkv", "triton_mma_unrolling2", "triton_mma_unrolling4"]
             # + (["vllm_v1", "vllm_v2"] if HAS_VLLM else [])
             + (["vllm_custom"] if HAS_VLLM_CUSTOM_PAGED else [])
         ),
         line_names=(
-            # ["TritonMMA", "TriMMATransV"]
-            ["Triton FMA", "TritonMMA", "TriMMATransV", "MMA Unroll2", "MMA Unroll4"]
+            ["TriMMATransKV"]
+            # ["TritonMMA", "TriMMATransV", "TriMMATransKV"]
+            # ["Triton FMA", "TritonMMA", "TriMMATransV", "TriMMATransKV", "MMA Unroll2", "MMA Unroll4"]
             # + (["vLLM_V1", "vLLM_V2"] if HAS_VLLM else [])
             + (["vLLM_CUSTOM"] if HAS_VLLM_CUSTOM_PAGED else [])
         ),
@@ -307,6 +310,42 @@ def benchmark(
                 out,
                 query,
                 key_cache_tri,
+                value_cache_tri_transv,
+                context_lens,
+                block_tables,
+                scale,
+                max_context_len,
+                num_splits,
+                partition_size,
+                device,
+            ),
+            warmup=20,
+            rep=100,
+            quantiles=quantiles,
+        )
+
+    if provider == "triton_mma_transkv":
+        value_cache_tri_transv = value_cache.permute(0, 1, 3, 2)
+        key_cache_tri_transk = key_cache_tri.transpose(2, 3)
+        #paged_attn_w_mma_transkv(
+        #        out,
+        #        query,
+        #        key_cache_tri_transk,
+        #        value_cache_tri_transv,
+        #        context_lens,
+        #        block_tables,
+        #        scale,
+        #        max_context_len,
+        #        num_splits,
+        #        partition_size,
+        #        device,
+            #)
+        #ms, min_ms, max_ms = 0, 0, 0
+        ms, min_ms, max_ms = triton.testing.do_bench(
+            lambda: paged_attn_w_mma_transkv(
+                out,
+                query,
+                key_cache_tri_transk,
                 value_cache_tri_transv,
                 context_lens,
                 block_tables,
